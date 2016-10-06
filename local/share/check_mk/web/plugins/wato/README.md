@@ -1,1 +1,1 @@
-own Wato Plugins 
+own wato plugins 
