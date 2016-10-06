@@ -28,6 +28,9 @@ import urllib2, sys, os, socket, pprint, base64, ssl
 import getopt
 from httplib import HTTPConnection, HTTPSConnection
 
+import logging
+logging.basicConfig(filename='/tmp/jolokia.log',level=logging.DEBUG)
+
 try:
     from simplejson import json
 except ImportError:
@@ -428,6 +431,7 @@ def get_agent_info_tcp(hostname):
 
 def main():
     opts = parse_arguments()
+    logging.debug(opts['agent'])
     win_agent_output = ""
     error = None
     error_exit = 1
@@ -472,12 +476,11 @@ def main():
         inst["instance"] = inst["instance"].replace(" ", "_")
 
         query_instance(inst)
-    logging.debug(host_address)
-    
-    win_agent_output = get_agent_info_tcp(host_address)
-    sys.stdout.write(win_agent_output)
-    sys.stdout.flush()
-    error_exit = 0
+    if not opts['agent']: 
+        win_agent_output = get_agent_info_tcp(host_address)
+        sys.stdout.write(win_agent_output)
+        sys.stdout.flush()
+        error_exit = 0
     
     return 0
 
