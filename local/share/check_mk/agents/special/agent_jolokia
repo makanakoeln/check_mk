@@ -28,9 +28,6 @@ import urllib2, sys, os, socket, pprint, base64, ssl
 import getopt
 from httplib import HTTPConnection, HTTPSConnection
 
-import logging
-logging.basicConfig(filename='/tmp/jolokia.log',level=logging.DEBUG)
-
 try:
     from simplejson import json
 except ImportError:
