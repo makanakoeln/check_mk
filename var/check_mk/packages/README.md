@@ -11,3 +11,5 @@ added option to add normal agent output
 === agent_bi-1.0.mkp ===
 
 special agent for getting the bi states as services
+
+=== agent_bi-1.0.mkp ===
