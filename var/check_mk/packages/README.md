@@ -13,3 +13,9 @@ added option to add normal agent output
 special agent for getting the bi states as services
 
 === user_overview-1.0.mkp ===
+
+sidebar snapin to get acknowledged host/service problems by current user
+
+=== customized_mssql_backup ===
+
+possibility to set levels for all kinds of backup types
