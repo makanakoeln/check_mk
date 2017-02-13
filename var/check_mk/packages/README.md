@@ -19,3 +19,7 @@ sidebar snapin to get acknowledged host/service problems by current user
 === customized_mssql_backup ===
 
 possibility to set levels for all kinds of backup types
+
+=== last_windows_update-1.0.mkp ===
+
+get date of the last windows update
