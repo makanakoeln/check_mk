@@ -16,7 +16,7 @@ special agent for getting the bi states as services
 
 sidebar snapin to get acknowledged host/service problems by current user
 
-=== customized_mssql_backup ===
+=== customized_mssql_backup-1.0.mkp ===
 
 possibility to set levels for all kinds of backup types
 
