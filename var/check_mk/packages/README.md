@@ -4,9 +4,10 @@ own mkp files
 
 added monitoring of snapshots in cluster mode
 
-=== agent_jolokia_add_agent_output-1.0.mkp ===
+=== customized_agent_jolokia-1.0.mkp ===
 
 added option to add normal agent output
+(security fix 3743 included)
 
 === agent_bi-1.0.mkp ===
 
