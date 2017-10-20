@@ -15,9 +15,14 @@ v1.1 - added missing customized check agent_jolokia
 
 special agent for getting the bi states as services
 
-=== user_overview-1.0.mkp ===
+=== user_overview-1.0.mkp (cmk < 1.4) ===
 
 sidebar snapin to get acknowledged host/service problems by current user
+
+=== user_overview-1.2.mkp (cmk >= 1.4) ===
+
+sidebar snapin to get acknowledged host/service problems by current user
+fixed issue related to a wrong named view. thanks to robert sander
 
 === customized_mssql_backup-1.0.mkp ===
 
