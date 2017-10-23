@@ -40,13 +40,12 @@ def agent_jolokia_arguments(params, hostname, ipaddress):
             arglist.append('--%s %s' % (param, params[param]))
 
     if params['agent'] == True:
-        arglist.append(' --agent --hostname ' + quote_shell_string(hostname))
+        arglist.append(' --agent ' + quote_shell_string(hostname))
 
     if 'login' in params:
         arglist.append('--user %s' % params['login'][0])
         arglist.append('--password %s' % params['login'][1])
         arglist.append('--mode %s' % params['login'][2])
-
 
     return " ".join(arglist)
 
