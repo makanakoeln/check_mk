@@ -32,3 +32,7 @@ possibility to set levels for all kinds of backup types
 === last_windows_update-1.0.mkp ===
 
 get date of the last windows update
+
+=== wsus_sync_status-1.1.mkp ===
+
+Get age and state of last sync on WSUS Server
