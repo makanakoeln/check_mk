@@ -1,0 +1,65 @@
+#!/usr/bin/python
+# -*- encoding: utf-8; py-indent-offset: 4 -*-
+
+#<<<wsus_sync_status>>>
+#Last-Sync W15V07 2015-11-16 20:27:33 Succeeded
+
+wsus_sync_status_default_levels = None
+
+def inventory_wsus_sync_status(info):
+    return [ (line[0], 'wsus_sync_status_default_levels')
+             for line in info
+             if len(line) == 5 or line[2] == "error:" ]
+
+def check_wsus_sync_status(item, params, info):
+    for line in info:
+        if "error:" in line:
+            return (3, '%s could not be found. Check long service output for details. \n %s' % (item, ' '.join(line[3:])))
+        else:
+            last_sync_date = False
+            try:
+                inst, host, last_sync_date, last_sync_time, sync_state= line
+            except ValueError:
+                inst, host= line
+
+            if item == inst and not "error:" in line:
+                if last_sync_date:
+                    timestamp = time.mktime(time.strptime(last_sync_date + ' ' + last_sync_time,
+                                                      '%Y-%m-%d %H:%M:%S'))
+                else:
+                    continue
+
+                state = 0
+                sec_ago = time.time() - timestamp
+
+                if params is not None:
+                    warn, crit = params['wsus_sync']
+                    if sec_ago >= crit:
+                        state = 2
+                    elif sec_ago >= warn:
+                        state = 1
+                    perfdata = [('seconds', sec_ago, warn, crit)]
+                else:
+                    perfdata = [('seconds', sec_ago)]
+                output = (state, 'Last sync at %s (%s ago)' %
+                    (time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp)),
+                     get_age_human_readable(sec_ago)), perfdata)
+                if sync_state == "Failed":
+                    state = 2
+                    output = (state, 'Last sync failed at %s' % (time.strftime('%Y-%m-%d %H:%M:%S', 
+                             time.localtime(timestamp))), perfdata)
+                elif sync_state == "Unknown":
+                    state = 1
+                    output = (state, 'Last sync result at %s was Unknown' % (time.strftime('%Y-%m-%d %H:%M:%S', 
+                             time.localtime(timestamp))), perfdata)
+                return output
+
+    return (3, '%s could not be found' % item)
+
+check_info['wsus_sync_status'] = {
+    'check_function':      check_wsus_sync_status,
+    'inventory_function':  inventory_wsus_sync_status,
+    'service_description': 'WSUS %s',
+    'has_perfdata':        True,
+    'group':               'wsus_sync_status',
+}
