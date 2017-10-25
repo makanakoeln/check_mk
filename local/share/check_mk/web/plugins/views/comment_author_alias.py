@@ -2,7 +2,7 @@ def paint_author_alias(userid):
     user_alias_query = "GET contacts\n" \
                        "Columns: alias\n" \
                        "Filter: name = %s\n" % userid
-    user_alias = sites.live.query(user_alias_query)
+    user_alias = sites.live().query(user_alias_query)
     if user_alias:
         return user_alias[0][0]
     else:
