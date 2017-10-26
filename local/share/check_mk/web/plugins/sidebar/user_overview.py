@@ -15,37 +15,53 @@ import cmk.store as store
 
 def get_user_overview_data(extra_filter_headers):
 
-    host_comment_query = "GET comments\n" \
-                         "Stats: author = %s\n" \
-                         "Stats: host_acknowledged > 0\n" \
-                         "StatsAnd: 2\n" % (config.user.id)
+    host_comment_query     = "GET comments\n" \
+                             "Stats: author = %s\n" \
+                             "Stats: host_acknowledged > 0\n" \
+                             "StatsAnd: 2\n" % (config.user.id)
 
-    svc_comment_query = "GET comments\n" \
-                        "Stats: author = %s\n" \
-                        "Stats: service_acknowledged > 0\n" \
-                        "StatsAnd: 2\n" % (config.user.id)
+    svc_comment_query      = "GET comments\n" \
+                             "Stats: author = %s\n" \
+                             "Stats: service_acknowledged > 0\n" \
+                             "StatsAnd: 2\n" % (config.user.id)
 
-    get_down_host_query = "GET downtimes\n" \
-                          "Stats: host_scheduled_downtime_depth > 0\n" \
-                          "Stats: downtime_recurring = 0\n" \
-                          "Stats: service_scheduled_downtime_depth = 0\n" \
-                          "StatsAnd: 3\n"
+    # nagios core has noch column "downtime_reccuring" so we have to 
+    # take different lql for different cores
 
-    get_down_service_query = "GET downtimes\n" \
+    if cmk.paths._get_core_name() == "cmc":
+        down_host_query    = "GET downtimes\n" \
+                             "Stats: host_scheduled_downtime_depth > 0\n" \
+                             "Stats: downtime_recurring = 0\n" \
+                             "Stats: service_scheduled_downtime_depth = 0\n" \
+                             "StatsAnd: 3\n"
+
+        down_service_query = "GET downtimes\n" \
                              "Stats: service_scheduled_downtime_depth > 0\n" \
                              "Stats: downtime_recurring = 0\n" \
                              "Stats: host_scheduled_downtime_depth = 0\n" \
                              "StatsAnd: 3\n"
 
+    else:
+        down_host_query    = "GET downtimes\n" \
+                             "Stats: host_scheduled_downtime_depth > 0\n" \
+                             "Stats: service_scheduled_downtime_depth = 0\n" \
+                             "StatsAnd: 2\n"
+
+        down_service_query = "GET downtimes\n" \
+                             "Stats: service_scheduled_downtime_depth > 0\n" \
+                             "Stats: host_scheduled_downtime_depth = 0\n" \
+                             "StatsAnd: 2\n"
+
     try:
         host_commentdata = sites.live().query_summed_stats(host_comment_query)
         svc_commentdata = sites.live().query_summed_stats(svc_comment_query)
-        down_host = sites.live().query_summed_stats(get_down_host_query)
-        down_service = sites.live().query_summed_stats(get_down_service_query)
+        down_host = sites.live().query_summed_stats(down_host_query)
+        down_service = sites.live().query_summed_stats(down_service_query)
 
     except livestatus.MKLivestatusNotFoundError:
         return None, None, None, None
-    return host_commentdata, svc_commentdata, down_host, down_service
+    else:
+        return host_commentdata, svc_commentdata, down_host, down_service
 
 def render_user_overview(extra_filter_headers="", extra_url_variables=None):
     #####################################
