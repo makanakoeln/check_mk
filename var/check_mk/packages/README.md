@@ -19,7 +19,7 @@ special agent for getting the bi states as services
 
 sidebar snapin to get acknowledged host/service problems by current user
 
-=== user_overview-1.2.mkp (cmk >= 1.4) ===
+=== user_overview-1.3.mkp (cmk >= 1.4) ===
 
 sidebar snapin to get acknowledged host/service problems by current user
 
