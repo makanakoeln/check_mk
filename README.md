@@ -1,9 +1,10 @@
 # projects
 Contains own scripts, especially for check_mk
-(developed and tested on check_mk cee)
 
-You can find full mkp files in var/check_mk/packages and install them in check_mk.
+Full mkp files in var/check_mk/packages
 
 Single files can be found in the local directory
 
-most mkp can be found on https://mathias-kettner.de/check_mk_exchange.php
+most mkp also on https://mathias-kettner.de/check_mk_exchange.php
+
+Feel free to report issues or requests
