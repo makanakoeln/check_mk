@@ -1,0 +1,49 @@
+#!/usr/bin/python
+# -*- encoding: utf-8; py-indent-offset: 4 -*-
+
+def inventory_check_lnd_network(info):
+    return [(None, {})]
+
+def check_lnd_network(item, no_params, info):
+    if info:
+        info_dict = {}
+        perfdata = []
+        state = 0
+
+        for item in info:
+            key = item[:-1][0]
+            #value = item[-1]
+            if len(item) >= 3:
+                info_dict[item[:-1][0]]= "".join(item[-(len(item)-1):])
+            else:
+                info_dict[item[:-1][0]]= item[-1]
+
+        network_info = "Nodes: %d - " \
+                       "Channel: %d (avg per node: %f, max: %d)" \
+                       " - Capacity: %.8f btc (avg: %.2f sat, min: %.2f sat, max: %.2f sat)" % ( 
+                                                                             int(info_dict["num_nodes"]), 
+                                                                             int(info_dict["num_channels"]), 
+                                                                             float(info_dict["avg_out_degree"]),
+                                                                             int(info_dict["max_out_degree"]),
+                                                                             float(info_dict["total_network_capacity"])/float(100000000),
+                                                                             float(info_dict["avg_channel_size"]),
+                                                                             float(info_dict["min_channel_size"]),
+                                                                             float(info_dict["max_channel_size"]), 
+                                                                           )
+
+        
+        perfdata.append(("Nodes", int(info_dict["num_nodes"])))
+        perfdata.append(("Channels", int(info_dict["num_channels"])))
+        perfdata.append(("Capacity", int(info_dict["total_network_capacity"])))
+
+        return state, network_info, perfdata
+    return 3, "UNKNOWN - Error getting lnd data"
+
+check_info["lnd_network"] = {
+    "check_function"          : check_lnd_network,
+    "default_levels_variable" : "lnd_network",
+    "inventory_function"      : inventory_check_lnd_network,
+    "service_description"     : "LND Network",
+    "has_perfdata"            : True,
+    "group"                   : "lnd_network",
+}

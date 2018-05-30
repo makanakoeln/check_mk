@@ -1,0 +1,72 @@
+#!/usr/bin/python
+# -*- encoding: utf-8; py-indent-offset: 4 -*-
+
+def inventory_check_lnd_info(info):
+    return [(None, {})]
+
+def check_lnd_info(item, _no_params, info):
+    if info:
+        info_dict = {}
+        perfdata = []
+        state = 0
+
+        for item in info:
+            key = item[:-1][0]
+            #value = item[-1]
+            if len(item) >= 3:
+                info_dict[item[:-1][0]]= "".join(item[-(len(item)-1):])
+            else:
+                info_dict[item[:-1][0]]= item[-1]
+
+        if info_dict["testnet"] == "False":
+            active_net = "Mainnet"
+        else:
+            active_net = "Testnet"
+    
+        # not state relevant
+        node_info = "Node alias: %s " \
+                    "- LND Version: %s " \
+                    "- Network: %s " \
+                    "- Chain: %s" % ( info_dict["alias"], 
+                                      info_dict["version"],
+                                      active_net, 
+                                      info_dict["chains"].replace("[","").replace("]","").replace("u'","").replace("'","").replace(",",", "),
+                                    )
+
+        # state relevant
+    
+        #num_active_channels
+        oc_warn=0
+        oc_crit=0
+        perfdata.append(("Open_Channel", int(info_dict["num_active_channels"]), oc_warn, oc_crit))
+        node_info += " - Open Channel: %s" % info_dict["num_active_channels"]
+    
+        #num_peers
+        op_warn=0
+        op_crit=0
+        perfdata.append(("Open_Peers", int(info_dict["num_peers"]), op_warn, op_crit))
+        node_info += " - Open Peers: %s" % info_dict["num_peers"]
+    
+        #synced_to_chain
+        if info_dict["synced_to_chain"] == "True":
+            node_info += " - Fully synced"
+        else:
+            state = 1
+            node_info += " - Node not fully synced(!)"
+    
+        #best_header_timestamp
+        node_info += " - Header Timestamp: %s" % get_timestamp_human_readable(info_dict["best_header_timestamp"])
+
+        # add public key to long output
+        node_info += " \n PubKey: %s" % info_dict["identity_pubkey"]
+
+        return state, node_info, perfdata
+    return 3, "UNKNOWN - Error getting lnd data"
+
+check_info["lnd_info"] = {
+    "check_function"        : check_lnd_info,
+    "inventory_function"    : inventory_check_lnd_info,
+    "service_description"   : "LND Node Info",
+    "has_perfdata"          : True,
+}
+
