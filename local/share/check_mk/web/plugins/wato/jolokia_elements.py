@@ -2,7 +2,7 @@
 # -*- encoding: utf-8; py-indent-offset: 4 -*-
 
 # added option to also get check_mk agent data
-# build within cmk 1.4.0i1
+# build within cmk 1.4.0i2p5
 
 mk_jolokia_elements = [
    ( "agent",
@@ -75,5 +75,5 @@ register_rule(group,
     ),
     title = _('Jolokia'),
     help = _('This rule allows querying the Jolokia web API.'),
-    factory_default = FACTORY_DEFAULT_UNUSED, # No default, do not use setting if no rule matches
+    factory_default = None,
     match = 'first')

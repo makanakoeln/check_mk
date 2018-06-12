@@ -1,0 +1,103 @@
+#!/usr/bin/python
+# -*- encoding: utf-8; py-indent-offset: 4 -*-
+
+factory_settings["lnd_balance"] = {
+    "levels_balance"             : (0, 0),
+    "levels_balance_confirmed"   : (0, 0),
+    "levels_balance_unconfirmed" : (0, 0),
+    "balance_diff" : False,
+    "balance_unit" : False,
+}
+
+def inventory_check_lnd_balance(info):
+    return [(None, {})]
+
+def check_lnd_balance(item, params, info):
+    if info:
+        info_dict = {}
+        perfdata = []
+        state = 0
+
+        for item in info:
+            key = item[:-1][0]
+            #value = item[-1]
+            if len(item) >= 3:
+                info_dict[item[:-1][0]]= "".join(item[-(len(item)-1):])
+            else:
+                info_dict[item[:-1][0]]= item[-1]
+
+        total_balance = int(info_dict["total_balance"])
+        confirmed_balance = int(info_dict["confirmed_balance"])
+        unconfirmed_balance = int(info_dict["unconfirmed_balance"])
+        
+    
+        tb_warn, tb_crit = params["levels_balance"]
+        cb_warn, cb_crit = params["levels_balance_confirmed"]
+        ub_warn, ub_crit = params["levels_balance_unconfirmed"]
+
+        if params["balance_unit"]:
+            unit = "btc"
+            balance_info = "Total Balance: %8.8f %s" % ( float(total_balance) / float(100000000), unit )
+        else:
+            unit = "sat"
+            balance_info = "Total Balance: %d %s" % (total_balance, unit )
+
+        if total_balance < tb_crit:
+            state = 2
+            balance_info += " (less than %s sat)(!!)" % tb_crit
+        elif total_balance < tb_warn:
+            if state != 2:
+                state = 1
+            balance_info += " (less than %s sat)(!)" % tb_warn
+        
+        if unit == "btc":
+            balance_info += " - Confirmed Balance: %.8f %s" % ( float(confirmed_balance) / float(100000000), unit )
+        else:
+            balance_info += " - Confirmed Balance: %d %s" % ( confirmed_balance, unit )
+        
+        if confirmed_balance < cb_crit:
+            state = 2
+            balance_info += " (less than %s sat)(!!)" % cb_crit
+        elif confirmed_balance < cb_warn:
+            if state != 2:
+                state = 1
+            balance_info += " (less than %s sat)(!)" % cb_warn
+      
+        if unit == "btc":
+            balance_info += " - Unconfirmed Balance: %f %s" % ( float(unconfirmed_balance) / float(100000000), unit )
+        else: 
+            balance_info += " - Unconfirmed Balance: %d %s" % ( unconfirmed_balance, unit )
+        
+        if unconfirmed_balance > ub_crit:
+            state = 2
+            balance_info += " (more than %ssat)(!!)" % ub_crit
+        elif unconfirmed_balance > ub_warn:
+            if state != 2:
+                state = 1
+            balance_info += " (more than %ssat)(!)" % ub_warn
+
+        if params["balance_diff"]:
+            if total_balance != confirmed_balance:
+                if int(params["balance_diff"]) == 1:
+                    balance_info += " (Total and Confirmed Balance differ(!))"
+                elif int(params["balance_diff"]) == 2:
+                    balance_info += " (Total and Confirmed Balance differ(!!))"
+                    
+                if state != 2:
+                    state = int(params["balance_diff"])
+        
+        perfdata.append(("Balance", total_balance, tb_warn, tb_crit))
+        perfdata.append(("Confirmed_Balance", confirmed_balance, cb_warn, cb_crit))
+        perfdata.append(("Unconfirmed_Balance", unconfirmed_balance, ub_warn, ub_crit))
+
+        return state, balance_info, perfdata
+    return 3, "UNKNOWN - Error getting lnd data"
+
+check_info["lnd_balance"] = {
+    "check_function"          : check_lnd_balance,
+    "default_levels_variable" : "lnd_balance",
+    "inventory_function"      : inventory_check_lnd_balance,
+    "service_description"     : "LND Balance",
+    "has_perfdata"            : True,
+    "group"                   : "lnd_balance",
+}

@@ -1,0 +1,229 @@
+#!/usr/bin/python
+# -*- encoding: utf-8; py-indent-offset: 4 -*-
+# +------------------------------------------------------------------+
+# |             ____ _               _        __  __ _  __           |
+# |            / ___| |__   ___  ___| | __   |  \/  | |/ /           |
+# |           | |   | '_ \ / _ \/ __| |/ /   | |\/| | ' /            |
+# |           | |___| | | |  __/ (__|   <    | |  | | . \            |
+# |            \____|_| |_|\___|\___|_|\_\___|_|  |_|_|\_\           |
+# |                                                                  |
+# | Copyright Mathias Kettner 2014             mk@mathias-kettner.de |
+# +------------------------------------------------------------------+
+#
+# This file is part of Check_MK.
+# The official homepage is at http://mathias-kettner.de/check_mk.
+#
+# check_mk is free software;  you can redistribute it and/or modify it
+# under the  terms of the  GNU General Public License  as published by
+# the Free Software Foundation in version 2.  check_mk is  distributed
+# in the hope that it will be useful, but WITHOUT ANY WARRANTY;  with-
+# out even the implied warranty of  MERCHANTABILITY  or  FITNESS FOR A
+# PARTICULAR PURPOSE. See the  GNU General Public License for more de-
+# tails. You should have  received  a copy of the  GNU  General Public
+# License along with GNU Make; see the file  COPYING.  If  not,  write
+# to the Free Software Foundation, Inc., 51 Franklin St,  Fifth Floor,
+# Boston, MA 02110-1301 USA.
+
+# Agent output:
+# <<<netapp_api_snapshots:sep(9)>>>
+# volume_snapshot volch150    percent-reserved 22 blocks-reserved 3322    size-total 12122 ...
+# volume_snapshot volch150    percentage-of-total-blocks 0 cumulative-total 122924 ...
+
+factory_settings["netapp_api_snapshots_default_levels"] = {
+    "levels" : (85.0, 90.0)
+}
+
+def inventory_netapp_api_snapshots(parsed):
+    for key in parsed.keys():
+        yield key, {}
+
+def check_netapp_api_snapshots(item, params, parsed):
+    data = parsed.get(item)
+
+    if not data:
+        return
+
+    if data[0].get("state") != "online":
+        yield 3, "No snapshot information available. Volume is %s" % data[0].get("state")
+        return
+
+    snapshot_total   = int(data[0]["reserve-used-actual"]) * 1024.0
+    size_total       = int(data[0]["size-total"])
+    reserved_bytes   = int(data[0]["snapshot-blocks-reserved"]) * 1024.0
+
+    if not reserved_bytes:
+        yield 0, "Used snapshot space: %s" % get_bytes_human_readable(snapshot_total),[("bytes", snapshot_total)]
+        yield params.get("state_noreserve", 1), "No snapshot reserve configured"
+        return
+
+    used_percent     = snapshot_total / reserved_bytes * 100.0
+    volume_total     = size_total + reserved_bytes
+
+    state = 0
+
+    warn, crit = params.get("levels")
+    if used_percent >= crit:
+        state = 2
+    elif used_percent >= warn:
+        state = 1
+
+    extra_info = state and "(Levels at %d%%/%d%%)" % (warn, crit) or ""
+
+    yield state, "Reserve used: %.1f%% (%s)%s" % (used_percent,
+                                                get_bytes_human_readable(snapshot_total), extra_info)
+
+    yield 0, "Total Reserve: %s%% (%s) of %s" % (data[0]["snapshot-percent-reserved"],
+                                                 get_bytes_human_readable(reserved_bytes),
+                                                 get_bytes_human_readable(volume_total)),\
+                                                 [("bytes", snapshot_total, 0, 0, 0, reserved_bytes)]
+
+check_info["netapp_api_snapshots"] = {
+    'parse_function'          : lambda info: netapp_api_parse_lines(info,
+                                custom_keys = ["volume_snapshot"], as_dict_list = True),
+    'check_function'          : check_netapp_api_snapshots,
+    'inventory_function'      : inventory_netapp_api_snapshots,
+    "default_levels_variable" : "netapp_api_snapshots_default_levels",
+    'service_description'     : 'Snapshots Volume',
+    'group'                   : "netapp_snapshots",
+    'has_perfdata'            : True,
+    'includes'                : ["netapp_api.include"]
+}
+
+#   .----------------------------------------------------------------------.
+#   |       ____ _           _                                _            |
+#   |      / ___| |_   _ ___| |_ ___ _ __ _ __ ___   ___   __| | ___       |
+#   |     | |   | | | | / __| __/ _ \ '__| '_ ` _ \ / _ \ / _` |/ _ \      |
+#   |     | |___| | |_| \__ \ ||  __/ |  | | | | | | (_) | (_| |  __/      |
+#   |      \____|_|\__,_|___/\__\___|_|  |_| |_| |_|\___/ \__,_|\___|      |
+#   |                                                                      |
+#   .----------------------------------------------------------------------.
+
+# Agent output:
+#<<<netapp_api_cluster_snapshots:sep(9)>>>
+#volume Archiv_FP        access-time 1474150502  snapshot weekly.2016-09-18_0015
+#volume Archiv_FP        snapshot hourly.2016-10-14_1105 access-time 1476435901
+#volume Archiv_FP        snapshot hourly.2016-10-14_1205 access-time 1476439500
+
+def inventory_netapp_api_cluster_snapshots(parsed):
+    for key in parsed.keys():
+        yield key, {}
+
+def check_netapp_api_cluster_snapshots(item, params, parsed):
+    data = parsed.get(item)
+    
+    if not "snapshot" in data[0]:
+        yield 0, "No snapshots found"
+
+    else:
+        snapshots = ""
+        info = ""
+        access = []
+        weekly_count=0
+        hourly_count=0
+        daily_count=0
+        other_count=0
+        for line in data:
+            if item in line.get("volume"):
+                snapshots += line.get("snapshot") + "\n"
+                access.append(line.get("access-time"))
+                if "weekly" in line.get("snapshot"):
+                    weekly_count+=1
+                elif "hourly" in line.get("snapshot"):
+                    hourly_count+=1
+                elif "daily" in line.get("snapshot"):
+                    daily_count+=1
+                else:
+                    other_count+=1
+        access.sort()
+
+        last = get_timestamp_human_readable(access[-1])
+
+        info += "last: %s, hourly: %s, daily: %s, weekly: %s, other: %s \n%s"  % (
+                                                                                  last, 
+                                                                                  hourly_count, 
+                                                                                  daily_count, 
+                                                                                  weekly_count, 
+                                                                                  other_count, 
+                                                                                  snapshots)
+        state = 0
+
+        if hourly_count == "0" and daily_count == "0" and weekly_count == "0" and unknown_count == "0":
+            state = 1
+            info = "No snapshots found(!) Please check snapshot configuration for this volume."
+
+
+        now = time.time()
+        snapshot_age = int(now) - int(access[-1])
+        #get_age_human_readable(snapshot_age)
+
+        perfdata = []
+        if params.get("age"):
+                warn, crit = params["age"]
+                levels = "(warn %s/crit %s)" % (get_age_human_readable(warn), get_age_human_readable(crit))
+                if snapshot_age > crit:
+                    yield 2, "Last snapshot is older than %s %s" % (get_age_human_readable(snapshot_age), levels)
+                elif snapshot_age > warn:
+                    yield 1, "Last snapshot is older than %s %s" % (get_age_human_readable(snapshot_age), levels)
+                perfdata.extend([("age", snapshot_age, warn, crit)])
+        else:
+                perfdata.extend([("age", snapshot_age)])
+        
+        if params.get("hourly"):
+                warn, crit = params["hourly"]
+                levels = "(warn %s/crit %s)" % (warn, crit) 
+                if hourly_count > crit:
+                    yield 2, "%s hourly Snapshots %s" % (hourly_count, levels)
+                elif hourly_count > warn:
+                    yield 1, "%s hourly Snapshots %s" % (hourly_count, levels)
+                perfdata.extend([("hourly", hourly_count, warn, crit)])
+        else:
+                perfdata.extend([("hourly", hourly_count)])
+        
+        if params.get("weekly"):
+                warn, crit = params["weekly"]
+                levels = "(warn %s/crit %s)" % (warn, crit) 
+                if weekly_count > crit:
+                    yield 2, "%s weekly Snapshots %s" % (weekly_count, levels)
+                elif weekly_count > warn:
+                    yield 1, "%s weekly Snapshots %s" % (weekly_count, levels)
+                perfdata.extend([("weekly", weekly_count, warn, crit)])
+        else:
+                perfdata.extend([("weekly", weekly_count)])
+        
+        if params.get("daily"):
+                warn, crit = params["daily"]
+                levels = "(warn %s/crit %s)" % (warn, crit) 
+                if daily_count > crit:
+                    yield 2, "%s daily Snapshots %s" % (daily_count, levels)
+                elif daily_count > warn:
+                    yield 1, "%s daily Snapshots %s" % (daily_count, levels)
+                perfdata.extend([("daily", daily_count, warn, crit)])
+        else:
+                perfdata.extend([("daily", daily_count)])
+        
+        if params.get("other"):
+                warn, crit = params["other"]
+                levels = "(warn %s/crit %s)" % (warn, crit) 
+                if other_count > crit:
+                    yield 2, "%s other Snapshots %s" % (other_count, levels)
+                elif other_count > warn:
+                    yield 1, "%s other Snapshots %s" % (other_count, levels)
+                perfdata.extend([("other", other_count, warn, crit)])
+        else:
+                perfdata.extend([("other", other_count)])
+        
+
+        yield state, info, perfdata
+
+
+check_info["netapp_api_cluster_snapshots"] = {
+    'parse_function'          : lambda info: netapp_api_parse_lines(info,
+                                custom_keys = ["volume"], as_dict_list = True),
+    'check_function'          : check_netapp_api_cluster_snapshots,
+    'inventory_function'      : inventory_netapp_api_cluster_snapshots,
+    "default_levels_variable" : "netapp_api_cluster_snapshots_default_levels",
+    'service_description'     : 'Volume %s Snapshots',
+    'group'                   : "netapp_api_cluster_snapshots",
+    'has_perfdata'            : True,
+    'includes'                : ["netapp_api.include"]
+}

@@ -1,0 +1,341 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8; py-indent-offset: 4 -*-
+
+import sys, getopt, urllib2, traceback, socket
+import os
+import time
+
+# version Info 
+
+agent_bi_info="1.0"
+
+# tell urllib2 not to honour "http(s)_proxy" env variables
+urllib2.getproxies = lambda: {}
+
+def usage():
+    sys.stderr.write("""
+USAGE: check_bi_aggr -b <BASE_URL> -a <AGGR_NAME> -u <USER> -s <SECRET>
+                     [-m <AUTH_MODE>] [-r] [-q] [-n <HOSTNAME>] [-t <TIMEOUT>] [-d]
+
+OPTIONS:
+  -b BASE_URL       The base URL to the monitoring environment, e.g.
+                    http://<hostname>/<site-id>
+  -a AGGR_NAME      Name of the aggregation, not the aggregation group.
+                    It is possible that there are multiple aggregations
+                    with an equal name, but you should ensure, that it
+                    is a unique one to prevent confusions
+  -u USER           User-ID of an automation user which is permitted to
+                    see all contents of the aggregation
+  -s SECRET         Automation secret of the user
+  -p PREFIX         Prefix used in front of the Service Description
+  -g                If set, also the check_mk agent data of the host is queried
+  -m AUTH_MODE      Authentication mode, either "cookie", "basic" or "digest",
+                    defaults to "cookie"
+  -t TIMEOUT        HTTP connect timeout in seconds (Default: 60)
+  -r                track downtimes. This requires the hostname to be set.
+  -q                track acknowledgements. This requires the hostname to be set.
+  -n HOSTNAME       The hostname for which this check is run.
+  --in-downtime S   S can be "ok" or "warn". Force this state if the
+                    aggregate is in scheduled downtime. OK states will always
+                    be unchanged.
+  --acknowledged S  Same as --in-downtime, but for acknowledged aggregates.
+  -d                Enable debug mode
+  -h, --help        Show this help message and exit
+
+""")
+
+short_options = 'b:a:u:s:p:g:m:t:n:dhrq'
+long_options = [ "help", "in-downtime=", "acknowledged=" ]
+
+try:
+    opts, args = getopt.getopt(sys.argv[1:], short_options, long_options)
+except getopt.GetoptError, err:
+    sys.stderr.write("%s\n" % err)
+    sys.exit(1)
+
+base_url         = None
+aggr_name        = None
+username         = None
+password         = None
+auth_mode        = 'cookie'
+prefix           = None
+agent            = None
+timeout          = 60
+debug            = False
+opt_in_downtime  = None
+opt_acknowledged = None
+track_downtime   = False
+track_ack        = False
+hostname         = None
+
+for o,a in opts:
+    if o in [ '-h', '--help' ]:
+        usage()
+        sys.exit(0)
+    elif o == '-b':
+        base_url = a
+    elif o == '-a':
+        aggr_name = a.split(",")
+    elif o == '-u':
+        username = a
+    elif o == '-s':
+        password = a
+    elif o == '-p':
+        prefix = a
+    elif o == '-g':
+        agent = a
+    elif o == '-m':
+        auth_mode = a
+    elif o == '-t':
+        timeout = int(a)
+    elif o == '-r':
+        track_downtime = True
+    elif o == '-q':
+        track_ack = True
+    elif o == '-n':
+        hostname = a
+    elif o == '-d':
+        debug = True
+    elif o == '--in-downtime':
+        opt_in_downtime = a
+    elif o == '--acknowledged':
+        opt_acknowledged = a
+
+if not base_url:
+    sys.stderr.write('Please provide the URL to the monitoring instance.\n')
+    usage()
+    sys.exit(1)
+
+if not aggr_name:
+    sys.stderr.write('Please provide the name of the aggregation.\n')
+    usage()
+    sys.exit(1)
+
+if not username or not password:
+    sys.stderr.write('Please provide valid user credentials.\n')
+    usage()
+    sys.exit(1)
+
+if track_downtime and not hostname:
+    sys.stderr.write('Please provide a hostname when using '
+                     'downtime tracking.\n')
+    usage()
+    sys.exit(1)
+
+if track_ack and not hostname:
+    sys.stderr.write('Please provide a hostname when using '
+                     'acknowledgement tracking.\n')
+    usage()
+    sys.exit(1)
+
+def init_auth():
+    if username and password:
+        passwdmngr = urllib2.HTTPPasswordMgrWithDefaultRealm()
+        passwdmngr.add_password(None, base_url, username, password)
+        if auth_mode == 'digest':
+            authhandler = urllib2.HTTPDigestAuthHandler(passwdmngr)
+        else:
+            authhandler = urllib2.HTTPBasicAuthHandler(passwdmngr)
+        opener = urllib2.build_opener(authhandler)
+        urllib2.install_opener(opener)
+
+if aggr_name[0] == "ALL":
+    url = "%s/check_mk/view.py" \
+          "?view_name=aggr_all_api" \
+          "&output_format=python" % \
+          (base_url.rstrip('/'))
+else:
+    url = "%s/check_mk/view.py" \
+          "?view_name=aggr_all_api" \
+          "&aggr_name_regex=%s" \
+          "&output_format=python" % \
+          (base_url.rstrip('/'), '|'.join(aggr_name).replace(" ","%20"))
+
+if auth_mode in ['basic', 'digest']:
+    init_auth()
+else:
+    url += "&_username=%s&_secret=%s" % \
+        (urllib2.quote(username), urllib2.quote(password))
+
+if debug:
+    sys.stderr.write('URL: %s\n' % url)
+
+try:
+    json = urllib2.urlopen(url, timeout = timeout).read()
+except urllib2.socket.timeout:
+    sys.stdout.write('ERROR: Socket timeout while opening URL: %s\n' % (url))
+    sys.exit(3)
+except urllib2.URLError, e:
+    sys.stdout.write("UNKNOWN: %s\n" % e)
+    sys.exit(3)
+except Exception, e:
+    sys.stdout.write('ERROR: Exception while opening URL (%s): %s\n' %
+                                            (url, traceback.format_exc()))
+    sys.exit(3)
+
+try:
+    obj = eval(json)
+except Exception, e:
+    sys.stdout.write('ERROR: Invalid json response (%s): %s\n' % (e, json))
+    sys.exit(3)
+
+if len(obj) == 1 or ( len(obj) - 1 ) != len(aggr_name) and aggr_name[0] != "ALL":
+    if len(aggr_name) >= 2:
+        found = []
+        for match in obj[1:]:
+            for name in aggr_name:
+                if filter(lambda x: name in x, match):
+                    found.append(name)
+        sys.exit('ERROR: The following Aggregation(s) could not be found: "%s"\n' % ', '.join([x for x in aggr_name if x not in found]))
+    else:
+        sys.exit('ERROR: Aggregation "%s" does not exist or user is not permitted\n' % aggr_name[0])
+    
+if type(obj) != list:
+    sys.stdout.write('ERROR: Invalid response: %s\n' % (json.replace("\n", "")))
+    sys.exit(3)
+
+# get check_mk agent data if option is set
+
+def get_agent_info_tcp(hostname):
+    response = ""
+    try:
+        if hostname in "123456789":
+            ipaddress = inst["server"]
+        else:
+            ipaddress = socket.gethostbyname(hostname)
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            s.settimeout(opt_timeout)
+        except:
+            pass # some old Python versions lack settimeout(). Better ignore than fail
+        s.connect((ipaddress, 6556))
+        try:
+            s.setblocking(1)
+        except:
+            pass
+        response = ""
+        while True:
+            out = s.recv(4096, socket.MSG_WAITALL)
+            if out and len(out) > 0:
+                response += out
+            else:
+                break
+        s.close()
+        return response
+    except Exception, e:
+        if debug:
+            raise
+    return response
+
+if not agent:
+    sys.stdout.write("<<<check_mk>>>\n")
+    sys.stdout.write("Version: %s\n" % agent_bi_info)
+
+sys.stdout.write('<<<check_bi>>>\n')
+for line in obj[1:]:
+    for aggr in line:
+        text = ""
+        livestatus_downtime = None
+        aggr_group = line[0]
+        aggr_name = line[1]
+        aggr_output = line[3]
+        aggr_state = int(line[2])
+        in_downtime = line[5]
+        ack = line[6]
+        if aggr_state == -1:
+            aggr_state = 3
+
+        if aggr_output == '':
+            aggr_output = 'Aggregation state is %s' % ['OK', 'WARN', 'CRIT', 'UNKNOWN'][aggr_state]
+
+        # Handle optional prefix
+        if prefix:
+            if prefix == "none":
+                aggr_name = "%s" % aggr_name.replace("_"," ")
+            elif prefix == "old_local":
+                aggr_name = "BI_Aggr_%s" % aggr_name.replace(" ","_")
+            elif prefix == "old_check":
+                aggr_name = "Aggr %s" % aggr_name.replace("_"," ")
+            elif prefix == "customer":
+                aggr_name = "%s: %s" % (aggr_group, aggr_name.replace("_"," "))
+            else:
+                aggr_name = "%s %s" % (prefix, aggr_name.replace("_"," "))
+
+        # Handle downtimes and acknowledgements
+        if opt_in_downtime and in_downtime == '1':
+            aggr_output += ", currently in downtime"
+            if opt_in_downtime == "ok":
+                aggr_state = 0
+            else: # "warn"
+                aggr_state = min(aggr_state, 1)
+
+        if track_downtime or track_ack:
+            # connect to livestatus
+            try:
+                import livestatus
+            except ImportError:
+                sys.stderr.write('The python livestatus api module is missing. Please install from\n'
+                                'Check_MK livestatus sources to a python import path.\n')
+                sys.exit(1)
+
+            socket_path = os.environ['OMD_ROOT'] + '/tmp/run/live'
+
+            conn = livestatus.SingleSiteConnection('unix:' + socket_path)
+
+            now = time.time()
+            if track_downtime:
+                # find out if, according to previous tracking, there already is a downtime
+                ids = conn.query_table(("GET downtimes\n"
+                                        "Columns: id\n"
+                                        "Filter: service_description = %s\n"
+                                        "Filter: author = tracking\n"
+                                        "Filter: end_time > %d") % (aggr_name.replace("(","").replace(")",""), now))
+
+                downtime_tracked = len(ids) > 0
+                if downtime_tracked != (in_downtime == '1'):
+                    # there is a discrepance between tracked downtime state and the real state
+                    if in_downtime == '1':
+                        livestatus_downtime = conn.command("[%d] SCHEDULE_SVC_DOWNTIME;%s;%s;%d;%d;1;0;0;tracking;Automatic downtime" % ( now, 
+                                                                                                                                          hostname, 
+                                                                                                                                          aggr_name.replace("(","").replace(")",""), 
+                                                                                                                                          now,
+                                                                                                                                          2147483647))
+                    else:
+                        for dt_id in ids:
+                            livestatus_downtime = conn.command("[%d] DEL_SVC_DOWNTIME;%d" % (now, dt_id[0]))
+        
+            if track_ack:
+                # find out if, according to previous tracking, there already is an ack
+                ack_ids = conn.query_table(("GET comments\n"
+                                            "Columns: id\n"
+                                            "Filter: service_description = %s\n"
+                                            "Filter: author = tracking\n" % ( aggr_name.replace("(","").replace(")","") )))
+
+                ack_tracked = len(ack_ids) > 0
+                if ack_tracked != (ack == '1'):
+                    if ack == '1':
+                        livestatus_downtime = conn.command("[%d] ACKNOWLEDGE_SVC_PROBLEM;%s;%s;1;0;0;tracking;Automatic acknowledgement\n" %( now,
+                                                                                                                                          hostname, 
+                                                                                                                                          aggr_name.replace("(","").replace(")",""))) 
+        
+        if opt_acknowledged and ack == '1':
+            aggr_output += ", is acknowledged"
+            if opt_acknowledged == "ok":
+                aggr_state = 0
+            else: # "warn"
+                aggr_state = min(aggr_state, 1)
+    
+    text+='%s %s %s\n' % (aggr_name, aggr_output, aggr_state)
+    
+    if livestatus_downtime:
+        livestatus_downtime
+  
+    sys.stdout.write(text)
+
+if agent:
+    win_agent_output = get_agent_info_tcp(agent)
+    sys.stdout.write(win_agent_output)
+    sys.stdout.flush()
+    error_exit = 0
+
+sys.exit()

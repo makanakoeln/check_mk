@@ -1,0 +1,186 @@
+#!/usr/bin/python
+# -*- encoding: utf-8; py-indent-offset: 4 -*-
+# +------------------------------------------------------------------+
+# |             ____ _               _        __  __ _  __           |
+# |            / ___| |__   ___  ___| | __   |  \/  | |/ /           |
+# |           | |   | '_ \ / _ \/ __| |/ /   | |\/| | ' /            |
+# |           | |___| | | |  __/ (__|   <    | |  | | . \            |
+# |            \____|_| |_|\___|\___|_|\_\___|_|  |_|_|\_\           |
+# |                                                                  |
+# | Copyright Mathias Kettner 2014             mk@mathias-kettner.de |
+# +------------------------------------------------------------------+
+#
+# This file is part of Check_MK.
+# The official homepage is at http://mathias-kettner.de/check_mk.
+#
+# check_mk is free software;  you can redistribute it and/or modify it
+# under the  terms of the  GNU General Public License  as published by
+# the Free Software Foundation in version 2.  check_mk is  distributed
+# in the hope that it will be useful, but WITHOUT ANY WARRANTY;  with-
+# out even the implied warranty of  MERCHANTABILITY  or  FITNESS FOR A
+# PARTICULAR PURPOSE. See the  GNU General Public License for more de-
+# tails. You should have  received  a copy of the  GNU  General Public
+# License along with GNU Make; see the file  COPYING.  If  not,  write
+# to the Free Software Foundation, Inc., 51 Franklin St,  Fifth Floor,
+# Boston, MA 02110-1301 USA.
+
+# Old agent
+# <<<mssql_backup>>>
+# MSSQL_SQLEXPRESS test123 1331207325
+
+# Newer agent
+# <<<mssql_backup>>>
+# MSSQL_SQL0x master 2016-07-08 20:20:27
+# MSSQL_SQL0x model 2016-07-08 20:20:28
+# MSSQL_SQL0x model 2016-07-12 09:09:42
+# MSSQL_SQL0x model 2016-07-11 20:20:07
+# MSSQL_SQL0x msdb 2016-07-08 20:20:43
+# MSSQL_SQL0x msdb 2016-07-11 20:20:07
+
+# New agent (added backup type)
+# <<<mssql_backup>>>
+# MSSQL_SQL0x master 2016-07-08 20:20:27 D
+# MSSQL_SQL0x model 2016-07-08 20:20:28 D
+# MSSQL_SQL0x model 2016-07-12 09:09:42 L
+# MSSQL_SQL0x model 2016-07-11 20:20:07 I
+# MSSQL_SQL0x msdb 2016-07-08 20:20:43 D
+# MSSQL_SQL0x msdb 2016-07-11 20:20:07 I
+
+# Might be None to have no thresholds or a tuple of two ints
+# (<warn age in seconds>, <crit age in seconds>)
+mssql_backup_default_levels = None
+
+def inventory_mssql_backup(info):
+    return [ (line[0] + ' ' + line[1], 'mssql_backup_default_levels')
+             for line in info
+             if len(line) in [3, 4, 5] ]
+
+def check_mssql_backup(item, params, info):
+    def backup_type_name(backup_type):
+        return {
+            "D": "database ",
+            "I": "database diff ",
+            "L": "log ",
+            "F": "file or filegroup ",
+            "G": "file diff ",
+            "P": "partial ",
+            "Q": "partial diff ",
+            "-": "unspecific ",
+        }.get(backup_type, "")
+
+    found_instance = False
+
+    for line in info:
+        if len(line) not in [3, 4, 5]:
+            continue
+
+        last_backup_date = False
+        if len(line) == 3:
+            inst, tablespace, last_backup_timestamp = line
+            backup_type = None
+
+        elif len(line) == 4:
+            inst, tablespace, last_backup_date, last_backup_time = line
+            backup_type = None
+
+        elif len(line) == 5:
+            inst, tablespace, last_backup_date, last_backup_time, backup_type = line
+
+
+        if item == inst + ' ' + tablespace:
+            found_instance = True
+            if last_backup_date:
+                # TODO: Timezone issue? Agent should always send UTC timestamp.
+                timestamp = time.mktime(time.strptime(last_backup_date + ' ' + last_backup_time,
+                                                      '%Y-%m-%d %H:%M:%S'))
+            else:
+                timestamp = int(last_backup_timestamp)
+
+            state = 0
+            sec_ago = time.time() - timestamp
+
+            age_warn, age_crit = None, None
+
+            if params is not None:
+                if backup_type_name(backup_type) == "database ":
+                    if "db" in params:
+                        if sec_ago >= params["db"][1]:
+                            state = 2
+                        elif sec_ago >= params["db"][0]:
+                            state = 1
+                        age_warn, age_crit = params["db"][0], params["db"][1]
+                if backup_type_name(backup_type) == "database diff ":
+                    if "db_diff" in params:
+                        if sec_ago >= params["db_diff"][1]:
+                            state = 2
+                        elif sec_ago >= params["db_diff"][0]:
+                            state = 1
+                        age_warn, age_crit = params["db_diff"][0], params["db_diff"][1]
+                if backup_type_name(backup_type) == "log ":
+                    if "log" in params:
+                        if sec_ago >= params["log"][1]:
+                            state = 2
+                        elif sec_ago >= params["log"][0]:
+                            state = 1
+                        age_warn, age_crit = params["log"][0], params["log"][1]
+                if backup_type_name(backup_type) == "file or filegroup ":
+                    if "file_or_group" in params:
+                        if sec_ago >= params["file_or_group"][1]:
+                            state = 2
+                        elif sec_ago >= params["file_or_group"][0]:
+                            state = 1
+                        age_warn, age_crit = params["file_or_group"][0], params["file_or_group"][1]
+                if backup_type_name(backup_type) == "file diff ":
+                    if "file_diff" in params:
+                        if sec_ago >= params["file_diff"][1]:
+                            state = 2
+                        elif sec_ago >= params["file_diff"][0]:
+                            state = 1
+                        age_warn, age_crit = params["file_diff"][0], params["file_diff"][1]
+                if backup_type_name(backup_type) == "partial ":
+                    if "partial_backup" in params:
+                        if sec_ago >= params["partial_backup"][1]:
+                            state = 2
+                        elif sec_ago >= params["partial_backup"][0]:
+                            state = 1
+                        age_warn, age_crit = params["partial_backup"][0], params["partial_backup"][1]
+                if backup_type_name(backup_type) == "partial diff ":
+                    if "partial_diff" in params:
+                        if sec_ago >= params["partial_diff"][1]:
+                            state = 2
+                        elif sec_ago >= params["partial_diff"][0]:
+                            state = 1
+                        age_warn, age_crit = params["partial_diff"][0], params["partial_diff"][1]
+                if backup_type_name(backup_type) == "unspecific ":
+                    if "unspec" in params:
+                        if sec_ago >= params["unspec"][1]:
+                            state = 2
+                        elif sec_ago >= params["unspec"][0]:
+                            state = 1
+                        age_warn, age_crit = params["unspec"][0], params["unspec"][1]
+               
+            if backup_type == None:
+                perfkey = "seconds"
+            else:
+                perfkey = "backup_age_%s" % backup_type_name(backup_type).strip().replace(" ", "_")
+
+            perfdata = [(perfkey, sec_ago, age_warn, age_crit)]
+
+            yield state, 'Last %sbackup was at %s (%s ago)' % \
+                (backup_type_name(backup_type),
+                 time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp)),
+                 get_age_human_readable(sec_ago)), perfdata
+
+    if not found_instance:
+        # Assume general connection problem to the database, which is reported
+        # by the "X Instance" service and skip this check.
+        raise MKCounterWrapped("Failed to connect to database")
+
+
+check_info['mssql_backup'] = {
+    'check_function':      check_mssql_backup,
+    'inventory_function':  inventory_mssql_backup,
+    'service_description': '%s Backup',
+    'has_perfdata':        True,
+    'group':               'mssql_backup',
+}
