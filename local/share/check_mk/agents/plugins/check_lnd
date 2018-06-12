@@ -5,10 +5,9 @@
 ########################################
 # TODO
 # - no sudo admin
-# change user in line 15, if needed
 ########################################
 
-import subprocess, json
+import subprocess, json, sys
 
 print "<<<lnd_info>>>"
 
@@ -17,9 +16,12 @@ process = subprocess.Popen(bashCommand.split(), stdout=subprocess.PIPE)
 info, info_error = process.communicate()
 
 if info_error == None:
-    info_dict = json.loads(info)
-    for key, value in info_dict.iteritems():
-        print key, value
+    if info == "":
+        sys.exit(0)
+    else:
+        info_dict = json.loads(info)
+        for key, value in info_dict.iteritems():
+            print key, value
 else:
     print "Error %s in getinfo command" % info_error
 
