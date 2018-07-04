@@ -1,6 +1,6 @@
 # mkp files
 
-install with "cmk -P MKP_NAME" (cre) or
+install with "cmk -P install MKP_NAME" (cre) or
 wato via extension module (cee)
 
 === agent_netapp_cluster_snapshots-1.0.mkp ===
