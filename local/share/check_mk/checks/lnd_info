@@ -5,6 +5,8 @@ def inventory_check_lnd_info(info):
     return [(None, {})]
 
 def check_lnd_info(item, _no_params, info):
+    if info == [[u'wallet', u'locked']]:
+        return 3, "Wallet locked"
     if info:
         info_dict = {}
         perfdata = []
@@ -61,7 +63,7 @@ def check_lnd_info(item, _no_params, info):
         node_info += " \n PubKey: %s" % info_dict["identity_pubkey"]
 
         return state, node_info, perfdata
-    return 3, "UNKNOWN - Error getting lnd data"
+    return 3, "UNKNOWN - Error getting lnd data (wallet locked?)"
 
 check_info["lnd_info"] = {
     "check_function"        : check_lnd_info,

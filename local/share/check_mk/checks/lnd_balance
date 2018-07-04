@@ -91,7 +91,8 @@ def check_lnd_balance(item, params, info):
         perfdata.append(("Unconfirmed_Balance", unconfirmed_balance, ub_warn, ub_crit))
 
         return state, balance_info, perfdata
-    return 3, "UNKNOWN - Error getting lnd data"
+    #return 3, "UNKNOWN - Error getting lnd data"
+    raise MKCounterWrapped("Failed to connect to lnd (wallet unlocked?)")
 
 check_info["lnd_balance"] = {
     "check_function"          : check_lnd_balance,

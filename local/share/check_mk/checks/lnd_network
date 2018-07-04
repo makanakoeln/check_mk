@@ -37,7 +37,8 @@ def check_lnd_network(item, no_params, info):
         perfdata.append(("Capacity", int(info_dict["total_network_capacity"])))
 
         return state, network_info, perfdata
-    return 3, "UNKNOWN - Error getting lnd data"
+    #return 3, "UNKNOWN - Error getting lnd data"
+    raise MKCounterWrapped("Failed to connect to lnd (wallet unlocked?)")
 
 check_info["lnd_network"] = {
     "check_function"          : check_lnd_network,
