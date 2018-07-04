@@ -17,6 +17,9 @@ info, info_error = process.communicate()
 
 if info_error == None:
     if info == "":
+        print "wallet locked"
+        print "<<<lnd_balance>>>"
+        print "<<<lnd_network>>>"
         sys.exit(0)
     else:
         info_dict = json.loads(info)
