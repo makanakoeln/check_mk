@@ -1,10 +1,7 @@
-# projects
-Contains own scripts, especially for check_mk
+# Check_mk scripts
 
-Full mkp files in var/check_mk/packages
+- Full mkp files in var/check_mk/packages \
+- Single files can be found in the local directory \
+- Most mkp files also on https://mathias-kettner.de/check_mk_exchange.php \
 
-Single files can be found in the local directory
-
-most mkp also on https://mathias-kettner.de/check_mk_exchange.php
-
-Feel free to report issues or requests
+** Feel free to report issues or requests **
