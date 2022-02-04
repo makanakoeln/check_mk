@@ -1,0 +1,20 @@
+title:  WSUS Sync Status
+author: Ronny Bruska
+agents: check_mk
+catalog: os
+license: GPL
+distribution: check_mk
+description:
+ This check monitor the state of the last WSUS synchronisation.
+
+ {OK} if the sync was in time and succesfull 
+ {Warn} if the last sync is older than the configured levels
+ {CRIT} if sync failed or the last sync is older than the configured levels
+
+ Needs windows plugin {{wsus_sync_status.ps1}} installed on the server.
+
+item:
+ One item
+
+inventory:
+ Finds one item 
